@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/Boopitty/Aggregator/internal/config"
 	"github.com/Boopitty/Aggregator/internal/database"
@@ -50,23 +49,23 @@ func main() {
 		os.Exit(1)
 	}
 
+	err = cmds.register("reset", handlerReset)
+	if err != nil {
+		fmt.Println("Error registering command:", err)
+		os.Exit(1)
+	}
+
 	// Get the command-line arguments and create a command struct.
-	input := os.Args
-	if len(input) < 2 {
+	fullInput := os.Args
+	if len(fullInput) < 2 {
 		fmt.Println("Error: No command provided.")
 		os.Exit(1)
 	}
 
-	cmdName := input[1:]
-	// Create a command struct with the command name and its arguments.
-	if len(cmdName) < 2 {
-		fmt.Println("Error: No arguments provided for the command.")
-		os.Exit(1)
-	}
-	cmd := command{name: cmdName[0], slice: cmdName[1:]}
-	if strings.TrimSpace(cmd.slice[0]) == "" {
-		fmt.Println("Error: Command arguments cannot be empty.")
-		os.Exit(1)
+	input := fullInput[1:]
+	cmd := command{name: input[0], slice: nil}
+	if len(input) > 1 {
+		cmd.slice = input[1:]
 	}
 
 	err = cmds.run(&s, cmd)

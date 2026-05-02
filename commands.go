@@ -85,6 +85,17 @@ func handlerRegister(s *state, cmd command) error {
 	return nil
 }
 
+func handlerReset(s *state, cmd command) error {
+	// This is a placeholder for the reset command handler.
+	err := s.db.Reset(context.Background())
+	if err != nil {
+		fmt.Println("Error resetting database: %w", err)
+		os.Exit(1)
+	}
+	fmt.Println("Database reset successfully")
+	return nil
+}
+
 // Runs a given command with the provided state if it exists.
 func (c *commands) run(s *state, cmd command) error {
 	handler, exists := c.handlers[cmd.name]
