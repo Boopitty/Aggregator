@@ -96,6 +96,22 @@ func handlerReset(s *state, cmd command) error {
 	return nil
 }
 
+func handlerGetAll(s *state, cmd command) error {
+	users, err := s.db.GetUsers(context.Background())
+	if err != nil {
+		fmt.Println("Error getting users:", err)
+		os.Exit(1)
+	}
+	for _, user := range users {
+		if user == s.cfg.CurrentUserName {
+			fmt.Printf("%s (current)\n", user)
+		} else {
+			fmt.Println(user)
+		}
+	}
+	return nil
+}
+
 // Runs a given command with the provided state if it exists.
 func (c *commands) run(s *state, cmd command) error {
 	handler, exists := c.handlers[cmd.name]
