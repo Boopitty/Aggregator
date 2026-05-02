@@ -51,6 +51,7 @@ func handlerLogin(s *state, cmd command) error {
 	return nil
 }
 
+// Register a new user into the database and set the current user to the new user's name.
 func handlerRegister(s *state, cmd command) error {
 	// This is a placeholder for the register command handler.
 	if cmd.slice == nil {
@@ -85,6 +86,7 @@ func handlerRegister(s *state, cmd command) error {
 	return nil
 }
 
+// Empty the contents of the database
 func handlerReset(s *state, cmd command) error {
 	// This is a placeholder for the reset command handler.
 	err := s.db.Reset(context.Background())
@@ -96,6 +98,7 @@ func handlerReset(s *state, cmd command) error {
 	return nil
 }
 
+// Get the names of all users and mark the current user
 func handlerGetAll(s *state, cmd command) error {
 	users, err := s.db.GetUsers(context.Background())
 	if err != nil {
@@ -109,6 +112,15 @@ func handlerGetAll(s *state, cmd command) error {
 			fmt.Println(user)
 		}
 	}
+	return nil
+}
+
+func agg(s *state, cmd command) error {
+	feed, err := fetchFeed(context.Background(), "https://www.wagslane.dev/index.xml")
+	if err != nil {
+		return fmt.Errorf("Error fetching feed: %w", err)
+	}
+	fmt.Println(feed)
 	return nil
 }
 
