@@ -115,6 +115,41 @@ func handlerGetAll(s *state, cmd command) error {
 	return nil
 }
 
+func handlerAddFeed(s *state, cmd command) error {
+	if cmd.slice == nil {
+		return fmt.Errorf("No arguments provided")
+	}
+	if len(cmd.slice) < 2 {
+		return fmt.Errorf("Not enough arguments provided")
+	}
+
+	feedName := cmd.slice[0]
+	url := cmd.slice[1]
+	time := time.Now()
+	name := s.cfg.CurrentUserName
+	user, err := s.db.GetUser(context.Background(), name)
+	if err != nil {
+		return fmt.Errorf("Error getting user: %w", err)
+	}
+
+	newFeed, err := s.db.AddFeed(context.Background(), database.AddFeedParams{
+		ID:        uuid.New(),
+		CreatedAt: time,
+		UpdatedAt: time,
+		Name:      feedName,
+		Url:       url,
+		UserID:    user.ID,
+	})
+	if err != nil {
+		return fmt.Errorf("Error adding feed: %w", err)
+	}
+
+	fmt.Printf("Feed added successfully:\nID: %s\nName: %s\nURL: %s\nCreated At: %s\nUpdated At: %s\n",
+		newFeed.ID, newFeed.Name, newFeed.Url, newFeed.CreatedAt, newFeed.UpdatedAt,
+	)
+	return nil
+}
+
 func agg(s *state, cmd command) error {
 	feed, err := fetchFeed(context.Background(), "https://www.wagslane.dev/index.xml")
 	if err != nil {
