@@ -73,6 +73,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	err = cmds.register("feeds", handlerFeeds)
+	if err != nil {
+		fmt.Println("Error registering command:", err)
+		os.Exit(1)
+	}
+
 	// Get the command-line arguments and create a command struct.
 	fullInput := os.Args
 	if len(fullInput) < 2 {

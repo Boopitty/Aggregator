@@ -150,6 +150,23 @@ func handlerAddFeed(s *state, cmd command) error {
 	return nil
 }
 
+func handlerFeeds(s *state, cmd command) error {
+	feeds, err := s.db.Feeds(context.Background())
+	if err != nil {
+		return fmt.Errorf("Error getting feeds: %w", err)
+	}
+
+	for i, feed := range feeds {
+		user, err := s.db.SearchUserID(context.Background(), feeds[i].UserID)
+		if err != nil {
+			return fmt.Errorf("Error searching user ID: %w", err)
+		}
+		fmt.Printf("Name: %s\nURL: %s\nUser Name ID: %s\n\n",
+			feed.Name, feed.Url, user.Name)
+	}
+	return nil
+}
+
 func agg(s *state, cmd command) error {
 	feed, err := fetchFeed(context.Background(), "https://www.wagslane.dev/index.xml")
 	if err != nil {
