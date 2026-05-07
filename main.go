@@ -39,7 +39,7 @@ func main() {
 	// Register the command handlers.
 	err = registerCommandHandlers(&cmds)
 	if err != nil {
-		fmt.Println("Error registering command handlers:", err)
+		fmt.Println("Error registering command:", err)
 		os.Exit(1)
 	}
 
