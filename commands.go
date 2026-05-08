@@ -29,6 +29,53 @@ type commands struct {
 	handlers map[string]func(*state, command) error
 }
 
+// Runs a given command with the provided state if it exists.
+func (c *commands) run(s *state, cmd command) error {
+	handler, exists := c.handlers[cmd.name]
+	if !exists {
+		return fmt.Errorf("Command not found: %s", cmd.name)
+	}
+	return handler(s, cmd) // Run the func and return the error value it produces.
+}
+
+// Registers a new handler function for a command name.
+func (c *commands) register(name string, f func(*state, command) error) error {
+	if f == nil {
+		return fmt.Errorf("Handler function cannot be nil")
+	}
+	if c.handlers == nil {
+		c.handlers = make(map[string]func(*state, command) error)
+	}
+	c.handlers[name] = f
+	return nil
+}
+
+// Middleware function that checks if a user is logged in before allowing access to certain command handlers.
+func middlewareLoggedIn(handler func(*state, command, *database.User) error) func(*state, command) error {
+	return func(s *state, cmd command) error {
+		if s.cfg.CurrentUserName == "" {
+			return fmt.Errorf("No user logged in. Please log in to use this command.")
+		}
+
+		user, err := s.db.GetUser(context.Background(), s.cfg.CurrentUserName)
+		if err != nil {
+			return fmt.Errorf("Error getting user: %w", err)
+		}
+
+		return handler(s, cmd, &user)
+	}
+}
+
+// Prints the details of a feed fetched from a URL.
+func agg(s *state, cmd command) error {
+	feed, err := fetchFeed(context.Background(), "https://www.wagslane.dev/index.xml")
+	if err != nil {
+		return fmt.Errorf("Error fetching feed: %w", err)
+	}
+	fmt.Println(feed)
+	return nil
+}
+
 // This will be the function signature of all command handlers.
 func handlerLogin(s *state, cmd command) error {
 	if cmd.slice == nil {
@@ -116,7 +163,7 @@ func handlerGetAll(s *state, cmd command) error {
 }
 
 // Add a new feed to the Feeds table and print its details.
-func handlerAddFeed(s *state, cmd command) error {
+func handlerAddFeed(s *state, cmd command, user *database.User) error {
 	if cmd.slice == nil {
 		return fmt.Errorf("No arguments provided")
 	}
@@ -137,11 +184,6 @@ func handlerAddFeed(s *state, cmd command) error {
 	}
 
 	time := time.Now()
-	name := s.cfg.CurrentUserName
-	user, err := s.db.GetUser(context.Background(), name)
-	if err != nil {
-		return fmt.Errorf("Error getting user: %w", err)
-	}
 
 	newFeed, err := s.db.AddFeed(context.Background(), database.AddFeedParams{
 		ID:        uuid.New(),
@@ -193,14 +235,9 @@ func handlerFeeds(s *state, cmd command) error {
 }
 
 // Follow a feed by its URL and print the details of the follow.
-func handlerFollow(s *state, cmd command) error {
+func handlerFollow(s *state, cmd command, user *database.User) error {
 	if cmd.slice == nil {
 		return fmt.Errorf("No arguments provided")
-	}
-
-	user, err := s.db.GetUser(context.Background(), s.cfg.CurrentUserName)
-	if err != nil {
-		return fmt.Errorf("Error getting user: %w", err)
 	}
 
 	feed, err := s.db.SearchFeedURL(context.Background(), cmd.slice[0])
@@ -226,12 +263,8 @@ func handlerFollow(s *state, cmd command) error {
 	return nil
 }
 
-func handlerFollowing(s *state, cmd command) error {
-	user, err := s.db.GetUser(context.Background(), s.cfg.CurrentUserName)
-	if err != nil {
-		return fmt.Errorf("Error getting user: %w", err)
-	}
-
+// Print the names of all feeds followed by the current user.
+func handlerFollowing(s *state, cmd command, user *database.User) error {
 	follows, err := s.db.GetFeedFollowsForUser(context.Background(), user.ID)
 	if err != nil {
 		return fmt.Errorf("Error getting feed follows for user: %w", err)
@@ -241,33 +274,5 @@ func handlerFollowing(s *state, cmd command) error {
 	for _, follow := range follows {
 		fmt.Printf("- %s\n", follow.FeedName)
 	}
-	return nil
-}
-
-// Prints the details of a feed fetched from a URL.
-func agg(s *state, cmd command) error {
-	feed, err := fetchFeed(context.Background(), "https://www.wagslane.dev/index.xml")
-	if err != nil {
-		return fmt.Errorf("Error fetching feed: %w", err)
-	}
-	fmt.Println(feed)
-	return nil
-}
-
-// Runs a given command with the provided state if it exists.
-func (c *commands) run(s *state, cmd command) error {
-	handler, exists := c.handlers[cmd.name]
-	if !exists {
-		return fmt.Errorf("Command not found: %s", cmd.name)
-	}
-	return handler(s, cmd) // Run the func and return the error value it produces.
-}
-
-// Registers a new handler function for a command name.
-func (c *commands) register(name string, f func(*state, command) error) error {
-	if c.handlers == nil {
-		c.handlers = make(map[string]func(*state, command) error)
-	}
-	c.handlers[name] = f
 	return nil
 }

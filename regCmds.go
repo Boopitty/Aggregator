@@ -33,7 +33,7 @@ func registerCommandHandlers(cmds *commands) error {
 		return fmt.Errorf("Error registering agg command: %w", err)
 	}
 
-	err = cmds.register("addfeed", handlerAddFeed)
+	err = cmds.register("addfeed", middlewareLoggedIn(handlerAddFeed))
 	if err != nil {
 		return fmt.Errorf("Error registering addfeed command: %w", err)
 	}
@@ -43,12 +43,12 @@ func registerCommandHandlers(cmds *commands) error {
 		return fmt.Errorf("Error registering feeds command: %w", err)
 	}
 
-	err = cmds.register("follow", handlerFollow)
+	err = cmds.register("follow", middlewareLoggedIn(handlerFollow))
 	if err != nil {
 		return fmt.Errorf("Error registering follow command: %w", err)
 	}
 
-	err = cmds.register("following", handlerFollowing)
+	err = cmds.register("following", middlewareLoggedIn(handlerFollowing))
 	if err != nil {
 		return fmt.Errorf("Error registering following command: %w", err)
 	}
