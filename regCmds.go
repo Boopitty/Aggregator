@@ -57,5 +57,10 @@ func registerCommandHandlers(cmds *commands) error {
 	if err != nil {
 		return fmt.Errorf("Error registering unfollow command: %w", err)
 	}
+
+	err = cmds.register("browse", middlewareLoggedIn(handlerBrowse))
+	if err != nil {
+		return fmt.Errorf("Error registering browse command: %w", err)
+	}
 	return nil
 }

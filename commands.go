@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/Boopitty/Aggregator/internal/config"
@@ -53,6 +54,9 @@ func (c *commands) register(name string, f func(*state, command) error) error {
 
 // Prints the details of a feed fetched from a URL.
 func agg(s *state, cmd command) error {
+	if len(cmd.slice) == 0 {
+		return fmt.Errorf("No time duration provided: 5s, 1m, 1h, etc.")
+	}
 	time_between_reqs := cmd.slice[0]
 	timer, err := time.ParseDuration(time_between_reqs)
 	if err != nil {
@@ -63,11 +67,16 @@ func agg(s *state, cmd command) error {
 	ticker := time.NewTicker(timer)
 	defer ticker.Stop()
 	for ; ; <-ticker.C {
-		scrapeFeeds(s)
+		fmt.Println("Attemting Scrape:")
+		err = scrapeFeeds(s)
+		if err != nil {
+			fmt.Printf("Error Scraping Feeds: %v\n", err)
+			os.Exit(1)
+		}
 	}
 }
 
-// Scrapes the feeds from the database and prints their details.
+// Scrapes the feeds from the database and saves the posts to the database.
 func scrapeFeeds(s *state) error {
 	// Get the next feed to fetch from the database
 	feed, err := s.db.GetNextFeedToFetch(context.Background())
@@ -87,9 +96,7 @@ func scrapeFeeds(s *state) error {
 	if err != nil {
 		return fmt.Errorf("Error marking feed as fetched: %w", err)
 	}
-	fmt.Printf("Feed fetched successfully:\nID: %s\nName: %s\nURL: %s\nCreated At: %s\nUpdated At: %s\n",
-		feed.ID, feed.Name, feed.Url, feed.CreatedAt, feed.UpdatedAt,
-	)
+	fmt.Printf("Posting Feed: %s\n", feed.Name)
 
 	// Fetch the feed using the URL from the database
 	feedData, err := fetchFeed(context.Background(), feed.Url)
@@ -97,10 +104,71 @@ func scrapeFeeds(s *state) error {
 		return fmt.Errorf("Error fetching feed data: %w", err)
 	}
 
-	// Iterate over the items in the feed and print their titles.
-	for _, item := range feedData.Channel.Item {
-		fmt.Printf("Title: %s\n", item.Title)
+	currentTime := time.Now()
+
+	// Check if post with same URL exits. If it does, update it. Otherwise create one.
+	_, err = s.db.GetPostByURL(context.Background(), feedData.Channel.Link)
+	if err == nil {
+		// Create a post for the feed
+		err = s.db.CreatePost(context.Background(), database.CreatePostParams{
+			ID:          uuid.New(),
+			CreatedAt:   currentTime,
+			UpdatedAt:   currentTime,
+			Title:       sql.NullString{String: feedData.Channel.Title, Valid: true},
+			Description: sql.NullString{String: feedData.Channel.Description, Valid: true},
+			Url:         feedData.Channel.Link,
+			FeedID:      feed.ID,
+		})
+		if err != nil {
+			return fmt.Errorf("Error creating post: %w", err)
+		}
+	} else {
+		// Update a post in the database
+		err = s.db.UpdatePost(context.Background(), database.UpdatePostParams{
+			FeedID:      feed.ID,
+			UpdatedAt:   currentTime,
+			Title:       sql.NullString{String: feedData.Channel.Title, Valid: true},
+			Description: sql.NullString{String: feedData.Channel.Description, Valid: true},
+		})
+		if err != nil {
+			return fmt.Errorf("Error Updating Post: %w", err)
+		}
 	}
+
+	fmt.Println("Making posts for the items...")
+	// Create a new post in the database for each item in the feed
+	for _, item := range feedData.Channel.Item {
+		// Check if post with same URL exits. If it does, update it. Otherwise create one.
+		_, err = s.db.GetPostByURL(context.Background(), item.Link)
+		if err == nil {
+			err = s.db.CreatePost(context.Background(), database.CreatePostParams{
+				ID:          uuid.New(),
+				CreatedAt:   currentTime,
+				UpdatedAt:   currentTime,
+				Title:       sql.NullString{String: item.Title, Valid: true},
+				Description: sql.NullString{String: item.Description, Valid: true},
+				Url:         item.Link,
+				PublishedAt: sql.NullString{String: item.PubDate, Valid: true},
+				FeedID:      feed.ID,
+			})
+			if err != nil {
+				return fmt.Errorf("Error creating post: %w", err)
+			}
+		} else {
+			err = s.db.UpdatePost(context.Background(), database.UpdatePostParams{
+				FeedID:      feed.ID,
+				UpdatedAt:   currentTime,
+				Title:       sql.NullString{String: item.Title, Valid: true},
+				Description: sql.NullString{String: item.Description, Valid: true},
+			})
+			if err != nil {
+				return fmt.Errorf("Error Updating Post: %w", err)
+			}
+		}
+
+	}
+	fmt.Printf("Finished Posting.\n\n")
+
 	return nil
 }
 
@@ -118,6 +186,47 @@ func middlewareLoggedIn(handler func(*state, command, *database.User) error) fun
 
 		return handler(s, cmd, &user)
 	}
+}
+
+// Prints all posts followed by the current user.
+func handlerBrowse(s *state, cmd command, user *database.User) error {
+	var limit int64 = 2
+	if len(cmd.slice) > 0 {
+		var err error
+		limit, err = strconv.ParseInt(cmd.slice[0], 10, 32)
+		if err != nil {
+			return fmt.Errorf("Error parsing limit: %w", err)
+		}
+	}
+
+	// Get the feeds followed by the user from the database
+	feeds, err := s.db.GetFeedFollowsForUser(context.Background(), user.ID)
+	if err != nil {
+		return fmt.Errorf("Error getting feed follows for user: %w", err)
+	}
+	if len(feeds) == 0 {
+		fmt.Printf("No feeds followed by %s\n", user.Name)
+		return nil
+	}
+
+	for _, feed := range feeds {
+		// Get all the posts for the feed
+		posts, err := s.db.GetPostsForUser(context.Background(), database.GetPostsForUserParams{
+			FeedID: feed.ID,
+			Limit:  int32(limit),
+		})
+		if err != nil {
+			return fmt.Errorf("Error getting posts: %w", err)
+		}
+
+		// Print the details of each post
+		fmt.Printf("Posts for feed: %s\n\n", feed.FeedName)
+		for _, post := range posts {
+			fmt.Printf("Title: %v\nDescription: %v\nURL: %v\n\n", post.Title, post.Description, post.Url)
+		}
+
+	}
+	return nil
 }
 
 // This will be the function signature of all command handlers.
