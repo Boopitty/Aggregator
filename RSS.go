@@ -1,3 +1,4 @@
+// This file contains the code for fetching and parsing RSS feeds.
 package main
 
 import (
@@ -9,6 +10,7 @@ import (
 	"net/http"
 )
 
+// RSSFeed represents the structure of an RSS feed, with a channel containing multiple items.
 type RSSFeed struct {
 	Channel struct {
 		Title       string    `xml:"title"`
@@ -18,6 +20,7 @@ type RSSFeed struct {
 	} `xml:"channel"`
 }
 
+// RSSItem represents a single item in an RSS feed, with a title, link, description, and publication date.
 type RSSItem struct {
 	Title       string `xml:"title"`
 	Link        string `xml:"link"`

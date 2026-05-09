@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"os"
 	"time"
@@ -50,6 +51,59 @@ func (c *commands) register(name string, f func(*state, command) error) error {
 	return nil
 }
 
+// Prints the details of a feed fetched from a URL.
+func agg(s *state, cmd command) error {
+	time_between_reqs := cmd.slice[0]
+	timer, err := time.ParseDuration(time_between_reqs)
+	if err != nil {
+		return fmt.Errorf("Error parsing time duration: %w", err)
+	}
+	fmt.Printf("Collecting feeds every %s...\n", timer)
+
+	ticker := time.NewTicker(timer)
+	defer ticker.Stop()
+	for ; ; <-ticker.C {
+		scrapeFeeds(s)
+	}
+}
+
+// Scrapes the feeds from the database and prints their details.
+func scrapeFeeds(s *state) error {
+	// Get the next feed to fetch from the database
+	feed, err := s.db.GetNextFeedToFetch(context.Background())
+	if err != nil {
+		return fmt.Errorf("Error getting next feed to fetch: %w", err)
+	}
+	if feed.ID == uuid.Nil {
+		fmt.Println("No feeds to fetch")
+		return nil
+	}
+
+	// Mark the feed as fetched in the database
+	err = s.db.MarkFeedFetch(context.Background(), database.MarkFeedFetchParams{
+		ID:            feed.ID,
+		LastFetchedAt: sql.NullTime{Time: time.Now(), Valid: true},
+	})
+	if err != nil {
+		return fmt.Errorf("Error marking feed as fetched: %w", err)
+	}
+	fmt.Printf("Feed fetched successfully:\nID: %s\nName: %s\nURL: %s\nCreated At: %s\nUpdated At: %s\n",
+		feed.ID, feed.Name, feed.Url, feed.CreatedAt, feed.UpdatedAt,
+	)
+
+	// Fetch the feed using the URL from the database
+	feedData, err := fetchFeed(context.Background(), feed.Url)
+	if err != nil {
+		return fmt.Errorf("Error fetching feed data: %w", err)
+	}
+
+	// Iterate over the items in the feed and print their titles.
+	for _, item := range feedData.Channel.Item {
+		fmt.Printf("Title: %s\n", item.Title)
+	}
+	return nil
+}
+
 // Middleware function that checks if a user is logged in before allowing access to certain command handlers.
 func middlewareLoggedIn(handler func(*state, command, *database.User) error) func(*state, command) error {
 	return func(s *state, cmd command) error {
@@ -64,16 +118,6 @@ func middlewareLoggedIn(handler func(*state, command, *database.User) error) fun
 
 		return handler(s, cmd, &user)
 	}
-}
-
-// Prints the details of a feed fetched from a URL.
-func agg(s *state, cmd command) error {
-	feed, err := fetchFeed(context.Background(), "https://www.wagslane.dev/index.xml")
-	if err != nil {
-		return fmt.Errorf("Error fetching feed: %w", err)
-	}
-	fmt.Println(feed)
-	return nil
 }
 
 // This will be the function signature of all command handlers.
