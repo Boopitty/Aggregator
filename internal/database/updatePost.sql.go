@@ -16,11 +16,11 @@ import (
 const updatePost = `-- name: UpdatePost :exec
 UPDATE posts
 SET updated_at = $2, title = $3, description = $4
-WHERE feed_id = $1
+WHERE id = $1
 `
 
 type UpdatePostParams struct {
-	FeedID      uuid.UUID
+	ID          uuid.UUID
 	UpdatedAt   time.Time
 	Title       sql.NullString
 	Description sql.NullString
@@ -28,7 +28,7 @@ type UpdatePostParams struct {
 
 func (q *Queries) UpdatePost(ctx context.Context, arg UpdatePostParams) error {
 	_, err := q.db.ExecContext(ctx, updatePost,
-		arg.FeedID,
+		arg.ID,
 		arg.UpdatedAt,
 		arg.Title,
 		arg.Description,
